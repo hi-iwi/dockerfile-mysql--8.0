@@ -140,40 +140,121 @@ EOSQL
 }
 
  	
-    # 如果挂载的数据里面已经有 mysql 文件夹，那么就表示已经有数据了。否则就需要重新创建数据
-	if [ ! -d "/var/lib/dockervol/mysql_data/mysql" ]; then
-		if [ -z "${MysqlRootPassword}" -a -z "${MysqlAllowEmptyPassword}" ]; then
-            aaLog --aalogpri_severity ERROR 'database is uninitialized and MysqlRootPassword not set'
-            aaLog '  Did you forget to add -e MysqlRootPassword=... ?'
-			exit 1
-		fi
+# 如果挂载的数据里面已经有 mysql 文件夹，那么就表示已经有数据了。否则就需要重新创建数据
+if [ ! -d "/var/lib/dockervol/mysql_data/mysql" ]; then
+    if [ -z "${MysqlRootPassword}" -a -z "${MysqlAllowEmptyPassword}" ]; then
+        aaLog --aalogpri_severity ERROR 'database is uninitialized and MysqlRootPassword not set'
+        aaLog '  Did you forget to add -e MysqlRootPassword=... ?'
+        exit 1
+    fi
+
+    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=docker"
+    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=docker
+    aaLog 'Database initialized'
+
+    if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql_data/server-key.pem" ]; then
+        aaLog 'Initializing certificates'
+        /usr/local/bin/mysql_ssl_rsa_setup --datadir="/var/lib/dockervol/mysql_data"
+        aaLog 'Certificates initialized'
+    fi
+
+    declare socket="$(getConfig 'socket' "$@")"
+    "$@" --skip-networking --socket="${socket}" &
+    declare pid="$!"
     
-		aaLog 'Initializing database'
-        "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=docker
-        aaLog 'Database initialized'
+    aaLog "Running $@ --skip-networking & : pid=$pid"
+    
+    ps aux 
+    
+    aaLog "Running /usr/local/bin/mysql --protocol=socket -uroot  -hlocalhost --socket=${socket}"
+    declare mysql=( /usr/local/bin/mysql --protocol=socket -uroot -hlocalhost --socket="${socket}" )
+    
+    aaLog 'MySQL first init process in progress...'
+    declare is_mysql_running=0
+    declare i
+    for i in {30..0}; do
+            if echo 'SELECT 1;' | "${mysql[@]}" &> /dev/null; then
+            is_mysql_running=1
+            break
+        fi
+        aaLog $i' MySQL init sleep 1'
+        sleep 1
+    done
+    aaLog "MySQL first initialiation has been initialized "$[30-i]" times"
+    if [ $is_mysql_running -eq 0 ]; then
+        aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
+        rm -rf "/var/lib/dockervol/mysql_data"
+        exit 1
+    fi
+            
+    if [ -z "$MysqlInitdbSkipTzinfo" ]; then
+        # sed is for https://bugs.mysql.com/bug.php?id=20545
+        /usr/local/bin/mysql_tzinfo_to_sql /usr/share/zoneinfo | sed 's/Local time zone must be set--see zic manual page/FCTY/' | "${mysql[@]}" mysql
+    fi
+    
 
-        if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql_data/server-key.pem" ]; then
-			aaLog 'Initializing certificates'
-			/usr/local/bin/mysql_ssl_rsa_setup --datadir="/var/lib/dockervol/mysql_data"
-			aaLog 'Certificates initialized'
-		fi
+    createDatabases mysql
+    grantPrivileges mysql
 
-		declare socket="$(getConfig 'socket' "$@")"
-		"$@" --skip-networking --socket="${socket}" &
-		declare pid="$!"
+
+    declare root_auth_plugin
+    if [ ! -z "$MysqlRootAuthPlugin" ]; then
+        root_auth_plugin='WITH '$MysqlRootAuthPlugin
+    fi
+
+    declare root_create
+    # default root to listen for connections from anywhere
+    if [ ! -z "$MysqlRootBindAddress" -a "$MysqlRootBindAddress" != 'localhost' ]; then
+        # no, we don't care if read finds a terminating character in this heredoc
+        # https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
+        read -r -d '' root_create <<-EOSQL || true
+            CREATE USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
+            ALTER USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
+            GRANT ALL ON *.* TO 'root'@'${MysqlRootBindAddress}' WITH GRANT OPTION ;
+EOSQL
+    fi
+
+    aaLog "Changing Root Password"
+    "${mysql[@]}" <<-EOSQL
+        -- What's done in this file shouldn't be replicated
+        --  or products like mysql-fabric won't work
+        SET @@SESSION.SQL_LOG_BIN=0;
+        -- DELETE FROM mysql.user ;
+        ALTER USER 'root'@'localhost' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
+        GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
+        ${root_create}
+        DROP DATABASE IF EXISTS test ;
+        FLUSH PRIVILEGES ;
+EOSQL
+    aaLog "Root Password changed"
+    
+    # -pAario     there should be no space between `-p` and `password`
+    mysql+=( -p"${MysqlRootPassword}" )
+
+
+    ######### Setting initialiation configurations with another mysql deamon process
+    if ! kill -s TERM "$pid" || ! wait "$pid"; then
+        #echo >&2 'MySQL init process failed.'
+        aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
+        rm -rf "/var/lib/dockervol/mysql_data"
+        exit 1
+    fi
+    
+    if [ ! -z "${MysqlRootPassword}" ]; then
         
-        aaLog "Running $@ --skip-networking & : pid=$pid"
+        aaLog "Initializing Start Up Process..."
+        # Run in background
+        "$@" --skip-networking &
         
-        ps aux 
+        pid="$!"
         
-        aaLog "Running /usr/sbin/mysql --protocol=socket -uroot"
-		declare mysql=( /usr/sbin/mysql --protocol=socket -uroot -hlocalhost --socket="${socket}" )
+        aaLog "Running mysqld with pid=$pid : Setting MysqlRootPassword"
         
-        aaLog 'MySQL first init process in progress...'
-        declare is_mysql_running=0
-        declare i
+        mysql=( /usr/local/bin/mysql --protocol=socket -uroot -p"${MysqlRootPassword}" )
+        
+        is_mysql_running=0
         for i in {30..0}; do
-            aaLog "$i"
+            aaLog 'MySQL (with root password) init process in progress...'
             if echo 'SELECT 1;' | "${mysql[@]}" &> /dev/null; then
                 is_mysql_running=1
                 break
@@ -181,181 +262,99 @@ EOSQL
             aaLog 'MySQL init sleep 1'
             sleep 1
         done
-        aaLog "MySQL first initialiation has been initialized "$[30-i]" times"
+        aaLog "MySQL (with root password) has been initialized "$[30-i]" times"
         if [ $is_mysql_running -eq 0 ]; then
             aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
             rm -rf "/var/lib/dockervol/mysql_data"
             exit 1
         fi
-                
-		if [ -z "$MysqlInitdbSkipTzinfo" ]; then
-			# sed is for https://bugs.mysql.com/bug.php?id=20545
-			/usr/local/bin/mysql_tzinfo_to_sql /usr/share/zoneinfo | sed 's/Local time zone must be set--see zic manual page/FCTY/' | "${mysql[@]}" mysql
-		fi
         
-
-        createDatabases mysql
-        grantPrivileges mysql
-
-
-        declare root_auth_plugin
-        if [ ! -z "$MysqlRootAuthPlugin" ]; then
-            root_auth_plugin='WITH '$MysqlRootAuthPlugin
-        fi
-
-        declare root_create
-		# default root to listen for connections from anywhere
-		if [ ! -z "$MysqlRootBindAddress" -a "$MysqlRootBindAddress" != 'localhost' ]; then
-			# no, we don't care if read finds a terminating character in this heredoc
-			# https://unix.stackexchange.com/questions/265149/why-is-set-o-errexit-breaking-this-read-heredoc-expression/265151#265151
-			read -r -d '' root_create <<-EOSQL || true
-				CREATE USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
-                ALTER USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
-				GRANT ALL ON *.* TO 'root'@'${MysqlRootBindAddress}' WITH GRANT OPTION ;
-			EOSQL
-		fi
-
-        aaLog "Changing Root Password"
-		"${mysql[@]}" <<-EOSQL
-			-- What's done in this file shouldn't be replicated
-			--  or products like mysql-fabric won't work
-			SET @@SESSION.SQL_LOG_BIN=0;
-			-- DELETE FROM mysql.user ;
-			ALTER USER 'root'@'localhost' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
-			GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
-            ${root_create}
-			DROP DATABASE IF EXISTS test ;
-			FLUSH PRIVILEGES ;
-		EOSQL
-        aaLog "Root Password changed"
-		
-        # -pAario     there should be no space between `-p` and `password`
-		mysql+=( -p"${MysqlRootPassword}" )
-    
-
-        ######### Setting initialiation configurations with another mysql deamon process
-		if ! kill -s TERM "$pid" || ! wait "$pid"; then
-			#echo >&2 'MySQL init process failed.'
-            aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
-            rm -rf "/var/lib/dockervol/mysql_data"
+        aaLog "Setting slave's configs with another mysql deamon process"
+        if ! kill -s TERM "$pid" || ! wait "$pid"; then
+            aaLog --aalogpri $[16*8+3] "Fail to kill MySQL pid=$pid... : After Granting Slave Server"
             exit 1
-		fi
+        fi
         
-        if [ ! -z "${MysqlRootPassword}" ]; then
-            
-            aaLog "Initializing Start Up Process..."
+        
+        if [ ! -z "${MysqlMaster}" -a ! -z "${MysqlMasterRepUser}" -a ! -z "${MysqlMasterRepPassword}" ]; then
+            aaLog "Setting Master Server..."
             # Run in background
             "$@" --skip-networking &
             
             pid="$!"
             
-            aaLog "Running mysqld with pid=$pid : Setting MysqlRootPassword"
+            aaLog " Running mysqld with pid=$pid : Setting Master Server"
             
-            mysql=( /usr/sbin/mysql --protocol=socket -uroot -p"${MysqlRootPassword}" )
-            
-            is_mysql_running=0
+            master_host=$(echo "${MysqlMaster}" | awk -F ':' '{print $1}')
+            master_port=$(echo "${MysqlMaster}" | awk -F ':' '{print $2}')
+            master_port=${master_port:-'3306'}
+            is_master_alive=0
+            # Try to connect to master mysql server within 30 times (1 sec each time)
             for i in {30..0}; do
-                aaLog 'MySQL (with root password) init process in progress...'
-                if echo 'SELECT 1;' | "${mysql[@]}" &> /dev/null; then
-                    is_mysql_running=1
+                aaLog "($i) : Connecting to Master Server ${MysqlMasterRepUser}@${MysqlMaster} ..."
+                
+                # -h127.0.0.3 -P3306 will connect to current server, not the master one
+                #   Please connect to its master's link name (e.g aa_mysql)
+                mysql_master=( /usr/local/bin/mysql -h"$master_host" -P"$master_port" -u"${MysqlMasterRepUser}" -p"${MysqlMasterRepPassword}")
+                if echo 'SELECT 1' | "${mysql_master[@]}" &> /dev/null; then
+                    is_master_alive=1
+                    aaLog " Connected to MySQL Master Server"
                     break
                 fi
-                aaLog 'MySQL init sleep 1'
+                
                 sleep 1
             done
-            aaLog "MySQL (with root password) has been initialized "$[30-i]" times"
-            if [ $is_mysql_running -eq 0 ]; then
-                aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
+                
+            if [ $is_master_alive -eq 0 ]; then
+                aaLog --aalogpri $[16*8+3] ' Master Server: ${MysqlMaster} is not alive ...'
                 rm -rf "/var/lib/dockervol/mysql_data"
                 exit 1
             fi
             
-            aaLog "Setting slave's configs with another mysql deamon process"
-            if ! kill -s TERM "$pid" || ! wait "$pid"; then
-                aaLog --aalogpri $[16*8+3] "Fail to kill MySQL pid=$pid... : After Granting Slave Server"
+            mysql=( /usr/local/bin/mysql --protocol=socket -uroot -p"${MysqlRootPassword}" )
+            is_slave_alive=0
+            for i in {30..0}; do
+                aaLog 'MySQL slave init process in progress...'
+                if echo 'SELECT 1;' | "${mysql[@]}" &> /dev/null; then
+                    is_slave_alive=1
+                    aaLog " Connected to MySQL Slave Server"
+                    break
+                fi
+                sleep 1
+            done
+            
+            if [ $is_slave_alive -eq 0 ]; then
+                aaLog --aalogpri $[16*8+3] 'MySQL slave init failure'
+                rm -rf "/var/lib/dockervol/mysql_data"
                 exit 1
             fi
             
+            aaLog " stop slave ..."
+            echo "stop slave;" | "${mysql[@]}"
             
-            if [ ! -z "${MysqlMaster}" -a ! -z "${MysqlMasterRepUser}" -a ! -z "${MysqlMasterRepPassword}" ]; then
-                aaLog "Setting Master Server..."
-                # Run in background
-                "$@" --skip-networking &
-                
-                pid="$!"
-                
-                aaLog " Running mysqld with pid=$pid : Setting Master Server"
-               
-			    master_host=$(echo "${MysqlMaster}" | awk -F ':' '{print $1}')
-				master_port=$(echo "${MysqlMaster}" | awk -F ':' '{print $2}')
-				master_port=${master_port:-'3306'}
-                is_master_alive=0
-                # Try to connect to master mysql server within 30 times (1 sec each time)
-                for i in {30..0}; do
-                    aaLog "($i) : Connecting to Master Server ${MysqlMasterRepUser}@${MysqlMaster} ..."
-                    
-                    # -h127.0.0.3 -P3306 will connect to current server, not the master one
-                    #   Please connect to its master's link name (e.g aa_mysql)
-                    mysql_master=( /usr/sbin/mysql -h"$master_host" -P"$master_port" -u"${MysqlMasterRepUser}" -p"${MysqlMasterRepPassword}")
-                    if echo 'SELECT 1' | "${mysql_master[@]}" &> /dev/null; then
-                        is_master_alive=1
-                        aaLog " Connected to MySQL Master Server"
-                        break
-                    fi
-                    
-                    sleep 1
-                done
-                 
-                if [ $is_master_alive -eq 0 ]; then
-                    aaLog --aalogpri $[16*8+3] ' Master Server: ${MysqlMaster} is not alive ...'
-                    rm -rf "/var/lib/dockervol/mysql_data"
-                    exit 1
-                fi
-                
-                mysql=( /usr/sbin/mysql --protocol=socket -uroot -p"${MysqlRootPassword}" )
-                is_slave_alive=0
-                for i in {30..0}; do
-                    aaLog 'MySQL slave init process in progress...'
-                    if echo 'SELECT 1;' | "${mysql[@]}" &> /dev/null; then
-                        is_slave_alive=1
-                        aaLog " Connected to MySQL Slave Server"
-                        break
-                    fi
-                    sleep 1
-                done
-                
-                if [ $is_slave_alive -eq 0 ]; then
-                    aaLog --aalogpri $[16*8+3] 'MySQL slave init failure'
-                    rm -rf "/var/lib/dockervol/mysql_data"
-                    exit 1
-                fi
-                
-                aaLog " stop slave ..."
-                echo "stop slave;" | "${mysql[@]}"
-                
-                aaLog " reset slave ..."
-                echo "reset slave;" | "${mysql[@]}"
-                
-                aaLog " CHANGE MASTER TO MASTER_HOST='$master_host', MASTER_PORT=$master_port, MASTER_USER='${MysqlMasterRepUser}', MASTER_PASSWORD='${MysqlMasterRepPassword}', MASTER_AUTO_POSITION = 1;"
-                
-                echo "CHANGE MASTER TO MASTER_HOST='$master_host', MASTER_PORT=$master_port, MASTER_USER='${MysqlMasterRepUser}', MASTER_PASSWORD='${MysqlMasterRepPassword}', MASTER_AUTO_POSITION = 1;" | "${mysql[@]}"
-                
-                aaLog " start slave"
-                echo "start slave;" | "${mysql[@]}"
-                
-                if ! kill -s TERM "$pid" || ! wait "$pid" ; then
-                    aaLog --aalogpri $[16*8+3] 'Fail to kill MySQL pid=$pid... : After Setting Master Server'
-                    rm -rf "/var/lib/dockervol/mysql_data"
-                    exit 1
-                fi
+            aaLog " reset slave ..."
+            echo "reset slave;" | "${mysql[@]}"
+            
+            aaLog " CHANGE MASTER TO MASTER_HOST='$master_host', MASTER_PORT=$master_port, MASTER_USER='${MysqlMasterRepUser}', MASTER_PASSWORD='${MysqlMasterRepPassword}', MASTER_AUTO_POSITION = 1;"
+            
+            echo "CHANGE MASTER TO MASTER_HOST='$master_host', MASTER_PORT=$master_port, MASTER_USER='${MysqlMasterRepUser}', MASTER_PASSWORD='${MysqlMasterRepPassword}', MASTER_AUTO_POSITION = 1;" | "${mysql[@]}"
+            
+            aaLog " start slave"
+            echo "start slave;" | "${mysql[@]}"
+            
+            if ! kill -s TERM "$pid" || ! wait "$pid" ; then
+                aaLog --aalogpri $[16*8+3] 'Fail to kill MySQL pid=$pid... : After Setting Master Server'
+                rm -rf "/var/lib/dockervol/mysql_data"
+                exit 1
             fi
-            aaLog 'MySQL start up process init step done. Ready to start up.'
         fi
-        
-        aaLog 'MySQL init process done. Ready to start up.'
+        aaLog 'MySQL start up process init step done. Ready to start up.'
     fi
+    
+    aaLog 'MySQL init process done. Ready to start up.'
+fi
 
-    setConfig
+setConfig
  
 
 [ -f "/etc/aa/lock/mysqld.sock" ] && rm -f "/etc/aa/lock/mysqld.sock"
