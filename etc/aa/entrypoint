@@ -30,6 +30,8 @@ GenSslCrt "${GenSslCrt}"
 [ ! -d "/var/lib/dockervol/mysql_data" ] && mkdir -p "/var/lib/dockervol/mysql_data"
 [ ! -d "/var/lib/dockervol/mysql_logbin" ] && mkdir -p "/var/lib/dockervol/mysql_logbin"
 chown -R docker:docker /var/log/dockervol /var/lib/dockervol
+chown docker:docker "$Cnf"
+chmod 0444 "$Cnf"
 
 setConfig() {
     local cnfLock="/etc/aa/lock/mysql.config.entlock"
@@ -362,8 +364,6 @@ setConfig
 [ -f "/etc/aa/lock/mysqld.sock.lock" ] && rm -f "/etc/aa/lock/mysqld.sock.lock"
 
 RunningSignal ${RunningID:-''}
-
-chmod 0444 "$Cnf"
 
 su - docker << EOF
 	$@

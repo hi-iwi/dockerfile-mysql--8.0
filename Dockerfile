@@ -52,4 +52,6 @@ RUN ln -sf /dev/stdout /var/log/dockervol/stdout.log && ln -sf /dev/stderr /var/
 # COPY 只能复制当前目录，不复制子目录内容
 COPY --chown=docker:docker ./etc/aa/*  /etc/aa/
 
-ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--user=docker", "--defaults-file=/etc/aa/my.cnf", "--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
+
+#  "--defaults-file=/etc/aa/my.cnf" 必须紧跟  "/usr/sbin/mysqld" 后面
+ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--defaults-file=/etc/aa/my.cnf", "--user=docker","--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
