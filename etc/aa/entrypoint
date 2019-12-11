@@ -4,6 +4,7 @@ set -e
 
 . /etc/aa/entrypointbase
 
+Cnf='/etc/aa/my.cnf'
 Timezone=${Timezone:-''}
 Host=${Host:-'mysqldocker'}
 LogTag=${LogTag:-"mysqlent[$$]"}
@@ -33,7 +34,7 @@ chown -R docker:docker /var/log/dockervol /var/lib/dockervol
 setConfig() {
     local cnfLock="/etc/aa/lock/mysql.config.entlock"
     if [ ! -f "$cnfLock" ]; then
-        local conf='/etc/aa/my.cnf'
+        local conf="$Cnf"
         [ ! -f "$conf" ] && echo -e "[mysqld]\nserver-id=1" > "$conf"
         aaLog "Configuration file: $conf"
         if [ ! -z "${MysqlServerID}" ]; then
@@ -361,6 +362,8 @@ setConfig
 [ -f "/etc/aa/lock/mysqld.sock.lock" ] && rm -f "/etc/aa/lock/mysqld.sock.lock"
 
 RunningSignal ${RunningID:-''}
+
+chmod 0444 "$Cnf"
 
 su - docker << EOF
 	$@
