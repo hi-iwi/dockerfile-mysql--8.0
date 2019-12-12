@@ -29,8 +29,8 @@ GenSslCrt "${GenSslCrt}"
 # 这个是必须要的，即使在CentOS7容器已经设置过权限了，但是这里重新挂载之后，就必须要设置修改权限
 [ ! -d "/var/lib/dockervol/mysql_data" ] && mkdir -p "/var/lib/dockervol/mysql_data"
 [ ! -d "/var/lib/dockervol/mysql_logbin" ] && mkdir -p "/var/lib/dockervol/mysql_logbin"
-chown -R docker:docker /var/log/dockervol /var/lib/dockervol
-chown docker:docker "$Cnf"
+chown -R Aa:Aa /var/log/dockervol /var/lib/dockervol
+chown Aa:Aa "$Cnf"
 chmod 0444 "$Cnf"
 
 setConfig() {
@@ -151,8 +151,8 @@ if [ ! -d "/var/lib/dockervol/mysql_data/mysql" ]; then
         exit 1
     fi
 
-    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=docker"
-    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=docker
+    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=Aa"
+    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=Aa
     aaLog 'Database initialized'
 
     if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql_data/server-key.pem" ]; then
@@ -365,7 +365,6 @@ setConfig
 
 RunningSignal ${RunningID:-''}
 
-su - docker << EOF
+su - Aa << EOF
 	$@
 EOF
- 
