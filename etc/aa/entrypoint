@@ -96,7 +96,7 @@ createDatabases(){
 		# for i in "100 200 300"; do    error!!!
 		for db in $dbs; do
 			aaLog "Creating datebase $db ..."
-			echo "CREATE DATABASE IF NOT EXISTS $db;" | "${mysql[@]}"
+			echo "CREATE SCHEMA IF NOT EXISTS `$db` DEFAULT CHARACTER SET utf8mb4;" | "${mysql[@]}"
 			aaLog "Datebase $db created"
 		done
 	fi
