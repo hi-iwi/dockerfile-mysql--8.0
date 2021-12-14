@@ -1,5 +1,4 @@
 #!/bin/bash
-# MAINTAINER Aario <Aario@luexu.com>
 set -e
 
 . /etc/aa/entrypointbase
@@ -8,7 +7,6 @@ Cnf='/etc/aa/my.cnf'
 Timezone=${Timezone:-''}
 Host=${Host:-'mysqldocker'}
 LogTag=${LogTag:-"mysqlent[$$]"}
-GenSslCrt=${GenSslCrt:-''}
 
 MysqlDatabases=${MysqlDatabases:-''}
 MysqlRootAuthPlugin=${MysqlRootAuthPlugin:-''}
@@ -23,14 +21,13 @@ aaLog() {
 }
 
 AaAdjustTime "${Timezone}"
-GenSslCrt "${GenSslCrt}"
 
 
 # 这个是必须要的，即使在CentOS7容器已经设置过权限了，但是这里重新挂载之后，就必须要设置修改权限
-[ ! -d "/var/lib/dockervol/mysql_data" ] && mkdir -p "/var/lib/dockervol/mysql_data"
-[ ! -d "/var/lib/dockervol/mysql_logbin" ] && mkdir -p "/var/lib/dockervol/mysql_logbin"
-chown -R Aa:Aa /var/log/dockervol /var/lib/dockervol
-chown Aa:Aa "$Cnf"
+[ ! -d "/var/lib/dockervol/mysql-data" ] && mkdir -p "/var/lib/dockervol/mysql-data"
+[ ! -d "/var/lib/dockervol/mysql-logbin" ] && mkdir -p "/var/lib/dockervol/mysql-logbin"
+chown -R iwi:iwi /var/log/dockervol /var/lib/dockervol
+chown iwi:iwi "$Cnf"
 chmod 0444 "$Cnf"
 
 setConfig() {
@@ -130,7 +127,7 @@ grantPrivileges(){
         fi
 
 
-        # GRANT select,insert,update ON *.* TO 'Aa'@'%' IDENTIFIED WITH mysql_native_password BY 'doE#@0fjsa&' ;
+        # GRANT select,insert,update ON *.* TO 'iwi'@'%' IDENTIFIED WITH mysql_native_password BY 'doE#@0fjsa&' ;
         "${mysql[@]}" <<-EOSQL
         SET @@SESSION.SQL_LOG_BIN=0;
         CREATE USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
@@ -144,20 +141,20 @@ EOSQL
 
  	
 # 如果挂载的数据里面已经有 mysql 文件夹，那么就表示已经有数据了。否则就需要重新创建数据
-if [ ! -d "/var/lib/dockervol/mysql_data/mysql" ]; then
+if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
     if [ -z "${MysqlRootPassword}" -a -z "${MysqlAllowEmptyPassword}" ]; then
         aaLog --aalogpri_severity ERROR 'database is uninitialized and MysqlRootPassword not set'
         aaLog '  Did you forget to add -e MysqlRootPassword=... ?'
         exit 1
     fi
 
-    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=Aa"
-    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql_data --user=Aa
+    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi"
+    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi
     aaLog 'Database initialized'
 
-    if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql_data/server-key.pem" ]; then
+    if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql-data/server-key.pem" ]; then
         aaLog 'Initializing certificates'
-        /usr/local/bin/mysql_ssl_rsa_setup --datadir="/var/lib/dockervol/mysql_data"
+        /usr/local/bin/mysql_ssl_rsa_setup --datadir="/var/lib/dockervol/mysql-data"
         aaLog 'Certificates initialized'
     fi
 
@@ -186,7 +183,7 @@ if [ ! -d "/var/lib/dockervol/mysql_data/mysql" ]; then
     aaLog "MySQL first initialiation has been initialized "$[30-i]" times"
     if [ $is_mysql_running -eq 0 ]; then
         aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
-        rm -rf "/var/lib/dockervol/mysql_data"
+        rm -rf "/var/lib/dockervol/mysql-data"
         exit 1
     fi
             
@@ -231,7 +228,7 @@ EOSQL
 EOSQL
     aaLog "Root Password changed"
     
-    # -pAario     there should be no space between `-p` and `password`
+    # -pPASSWORD     there should be no space between `-p` and `password`
     mysql+=( -p"${MysqlRootPassword}" )
 
 
@@ -239,7 +236,7 @@ EOSQL
     if ! kill -s TERM "$pid" || ! wait "$pid"; then
         #echo >&2 'MySQL init process failed.'
         aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
-        rm -rf "/var/lib/dockervol/mysql_data"
+        rm -rf "/var/lib/dockervol/mysql-data"
         exit 1
     fi
     
@@ -268,7 +265,7 @@ EOSQL
         aaLog "MySQL (with root password) has been initialized "$[30-i]" times"
         if [ $is_mysql_running -eq 0 ]; then
             aaLog --aalogpri $[16*8+3] 'MySQL init process failed.'
-            rm -rf "/var/lib/dockervol/mysql_data"
+            rm -rf "/var/lib/dockervol/mysql-data"
             exit 1
         fi
         
@@ -310,7 +307,7 @@ EOSQL
                 
             if [ $is_master_alive -eq 0 ]; then
                 aaLog --aalogpri $[16*8+3] ' Master Server: ${MysqlMaster} is not alive ...'
-                rm -rf "/var/lib/dockervol/mysql_data"
+                rm -rf "/var/lib/dockervol/mysql-data"
                 exit 1
             fi
             
@@ -328,7 +325,7 @@ EOSQL
             
             if [ $is_slave_alive -eq 0 ]; then
                 aaLog --aalogpri $[16*8+3] 'MySQL slave init failure'
-                rm -rf "/var/lib/dockervol/mysql_data"
+                rm -rf "/var/lib/dockervol/mysql-data"
                 exit 1
             fi
             
@@ -347,7 +344,7 @@ EOSQL
             
             if ! kill -s TERM "$pid" || ! wait "$pid" ; then
                 aaLog --aalogpri $[16*8+3] 'Fail to kill MySQL pid=$pid... : After Setting Master Server'
-                rm -rf "/var/lib/dockervol/mysql_data"
+                rm -rf "/var/lib/dockervol/mysql-data"
                 exit 1
             fi
         fi
@@ -365,6 +362,6 @@ setConfig
 
 RunningSignal ${RunningID:-''}
 
-su - Aa << EOF
+su - iwi << EOF
 	$@
 EOF

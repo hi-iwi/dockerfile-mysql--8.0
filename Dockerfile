@@ -45,13 +45,13 @@ RUN make && make install
  
 RUN yum clean all && rm -rf /var/cache/yum && rm -rf /usr/local/src/*
 
-RUN chown -R Aa:Aa /usr/sbin/mysqld && chmod u+x /usr/sbin/mysqld
+RUN chown -R iwi:iwi /usr/sbin/mysqld && chmod u+x /usr/sbin/mysqld
 RUN ln -sf /dev/stdout /var/log/dockervol/stdout.log && ln -sf /dev/stderr /var/log/dockervol/stderr.log
 
 
 # COPY 只能复制当前目录，不复制子目录内容
-COPY --chown=Aa:Aa ./etc/aa/*  /etc/aa/
+COPY --chown=iwi:iwi ./etc/aa/*  /etc/aa/
 
 
 #  "--defaults-file=/etc/aa/my.cnf" 必须紧跟  "/usr/sbin/mysqld" 后面
-ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--defaults-file=/etc/aa/my.cnf", "--user=Aa","--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
+ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--defaults-file=/etc/aa/my.cnf", "--user=iwi","--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
