@@ -8,7 +8,7 @@ ENV LibProtobufLiteVer protobuf-3.19.4
 ADD ./src/* /usr/local/src/
 # cmake3 需要用到 git
 
-RUN yum -y update && yum install -y gcc gcc-c++ make cmake3 ncurses-devel bison bison-devel openssl-devel openssl
+RUN yum -y update && yum install -y gcc gcc-c++ make ncurses-devel bison bison-devel openssl-devel openssl
 # cmake3 需要安装的
 RUN yum install -y git devtoolset-11-binutils devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-gcc-gfortran
 
@@ -24,8 +24,8 @@ WORKDIR /usr/local/src/${LibProtobufLiteVer}
 RUN ./autogen.sh
 RUN ./configure --prefix=/usr/local
 RUN make && make install
-RUN ln -s /usr/local/lib/libprotobuf-lite.so /usr/slib/libprotobuf-lite.so.3.19.4
-RUN ln -s /usr/local/lib/libprotobuf-lite.so /usr/slib/libprotobuf-lite.so
+RUN ln -s /usr/local/lib/libprotobuf-lite.so /usr/lib64/libprotobuf-lite.so.3.19.4
+RUN ln -s /usr/local/lib/libprotobuf-lite.so /usr/lib64/libprotobuf-lite.so
 RUN ldconfig
 
 WORKDIR /usr/local/src/${MysqlVer}
