@@ -12,7 +12,7 @@ download(){
     if [ -f "$f" ]; then
       return 0
     fi
-    wget "$src"
+    wget "$src" -O "$f"
 }
 # list in the downloading page  http://dev.mysql.com/downloads/mysql/
 # Source Code > Generic Linux (Architecture Independent), Compressed TAR Archive Includes Boost Headers
