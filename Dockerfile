@@ -6,9 +6,9 @@ ENV MysqlVer mysql-8.0.29
 ENV CmakeVer cmake-3.23.1
 ENV LibProtobufLiteVer protobuf-3.19.4
 ADD ./src/* /usr/local/src/
-# cmake3 需要用到 git
 
-RUN yum -y update && yum install -y gcc gcc-c++ make ncurses-devel bison bison-devel openssl-devel openssl
+# MySQL has a dependency on the libaio library
+RUN yum -y update && yum install -y gcc gcc-c++ gperftools gperftools-devel libaio make ncurses-devel bison bison-devel openssl-devel openssl
 # cmake3 需要安装的
 RUN yum install -y git devtoolset-11-binutils devtoolset-11-gcc devtoolset-11-gcc-c++ devtoolset-11-gcc-gfortran
 
@@ -74,4 +74,4 @@ COPY --chown=iwi:iwi ./etc/aa/*  /etc/aa/
 
 
 #  "--defaults-file=/etc/aa/my.cnf" 必须紧跟  "/usr/sbin/mysqld" 后面
-ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--defaults-file=/etc/aa/my.cnf", "--user=iwi","--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
+#ENTRYPOINT ["/etc/aa/entrypoint", "/usr/sbin/mysqld", "--defaults-file=/etc/aa/my.cnf", "--user=iwi","--gtid-mode=ON", "--explicit_defaults_for_timestamp", "--enforce-gtid-consistency"]
