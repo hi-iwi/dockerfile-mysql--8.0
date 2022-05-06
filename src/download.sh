@@ -1,6 +1,6 @@
 #!/bin/bash
 readonly mysqlVer='8.0.29'
-readonly cmakeVer='3.23.1'
+readonly cmakeVer='3.22.4'
 readonly cmakeTgz="cmake-${cmakeVer}"
 readonly protobufVer='3.19.4'  # 这个是固定死的，mysqld 需要一个固定死的 libprotobuf-lite.so.xxx
 readonly protobufTgz="protobuf-${protobufVer}"
