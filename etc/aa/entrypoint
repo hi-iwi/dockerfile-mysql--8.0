@@ -161,7 +161,7 @@ if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
         aaLog 'Certificates initialized'
     fi
 
-    declare socket="$(getConfig 'socket' "$@")"
+    socket="$(getConfig 'socket' "$@")"
     "$@" --skip-networking --socket="${socket}" &
     declare pid="$!"
     
