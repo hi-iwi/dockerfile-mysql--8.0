@@ -4,7 +4,7 @@ FROM aario/centos:7
 # Source Code > Generic Linux (Architecture Independent), Compressed TAR Archive Includes Boost Headers
 
 ENV MysqlVer mysql-8.0.33
-ENV CmakeVer cmake-3.20.6
+ENV CmakeVer cmake-3.26.4
 
 ADD ./src/* /usr/local/src/
 
