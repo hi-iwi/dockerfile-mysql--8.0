@@ -3,7 +3,7 @@ FROM aario/centos:7
 # list in the downloading page  http://dev.mysql.com/downloads/mysql/
 # Source Code > Generic Linux (Architecture Independent), Compressed TAR Archive Includes Boost Headers
 
-ENV MysqlVer mysql-8.0.29
+ENV MysqlVer mysql-8.0.33
 ENV CmakeVer cmake-3.20.6
 
 ADD ./src/* /usr/local/src/

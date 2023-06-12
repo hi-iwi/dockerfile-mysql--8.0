@@ -1,6 +1,6 @@
 #!/bin/bash
-readonly mysqlVer='8.0.29'
-readonly cmakeVer='3.20.6'
+readonly mysqlVer='8.0.33'
+readonly cmakeVer='3.26.4'
 readonly cmakeTgz="cmake-${cmakeVer}"
 
 
