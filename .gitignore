@@ -3,5 +3,6 @@
 *.~$lock
 node_modules
 yarn-error.log
+
 src/*
 !src/download.sh
