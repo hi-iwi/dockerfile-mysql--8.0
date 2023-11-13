@@ -94,6 +94,7 @@ createDatabases(){
 		for db in $dbs; do
 			aaLog "Creating datebase $db ..."
 			echo "CREATE SCHEMA IF NOT EXISTS $db CHARACTER SET utf8mb4;" | "${mysql[@]}"
+			echo "USER $db;" | "${mysql[@]}"   # grant privileges 时候要求进入某个库后再执行
 			aaLog "Datebase $db created"
 		done
 	fi
@@ -128,15 +129,13 @@ grantPrivileges(){
 
 
         # GRANT select,insert,update ON *.* TO 'iwi'@'%' IDENTIFIED WITH mysql_native_password BY 'password' ;
+        # @'%' 不包括 @'localhost'  ，但是包括 @'127.0.0.1' 如果需要用localhost访问，则再增加一个授权
         "${mysql[@]}" <<-EOSQL
         SET @@SESSION.SQL_LOG_BIN=0;
         CREATE USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
-        CREATE USER '${user}'@'localhost' IDENTIFIED ${authPlugin} BY '${password}' ;
         -- change exists user's password
         ALTER USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
-        ALTER USER '${user}'@'localhost' IDENTIFIED ${authPlugin} BY '${password}' ;
         GRANT ${priv} ON ${tables} TO '${user}'@'${addr}' WITH GRANT OPTION ;
-        GRANT ${priv} ON ${tables} TO '${user}'@'localhost' WITH GRANT OPTION ;
 EOSQL
 
     done
