@@ -112,7 +112,8 @@ grantPrivileges(){
     local password
     local sql
 
-    for p in ${MysqlPrivileges//;;;/ }; do 
+    for p in ${MysqlPrivileges//;;;/ }; do
+      echo "[privilege] ${p}"
         priv=$(echo $p | awk -F ':::' '{print $1;}')
         priv=${priv//+/ }
         tables=$(echo $p | awk -F ':::' '{print $2;}')
@@ -126,6 +127,17 @@ grantPrivileges(){
             authPlugin='WITH '$authPlugin
         fi
 
+        schema=$(echo $tables | awk -F '.' '{print $1;}')
+        tbs=$(echo $tables | awk -F '.' '{print $2;}')
+        if [ -z "$tbs" ]; then
+          tbs="*"
+        fi
+        if [[ "$schema" != "*" && ${schema:0:1} != "\`" ]]; then
+          schema="\`${schema}\`"
+        fi
+        if [[ "$tbs" != "*" && ${tbs:0:1} != "\`" ]]; then
+            tbs="\`${tbs}\`"
+        fi
 
         # GRANT select,insert,update ON *.* TO 'iwi'@'%' IDENTIFIED WITH mysql_native_password BY 'password' ;
         # @'%' 不包括 @'localhost'  ，但是包括 @'127.0.0.1' 如果需要用localhost访问，则再增加一个授权
@@ -137,7 +149,7 @@ grantPrivileges(){
         CREATE USER IF NOT EXISTS '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
         ALTER USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
         USE mysql;
-        GRANT ${priv} ON ${tables} TO '${user}'@'${addr}' WITH GRANT OPTION ;
+        GRANT ${priv} ON ${schema}.${tbs} TO '${user}'@'${addr}' WITH GRANT OPTION ;
 EOSQL
 
     done
