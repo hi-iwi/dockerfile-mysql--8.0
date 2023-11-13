@@ -94,7 +94,6 @@ createDatabases(){
 		for db in $dbs; do
 			aaLog "Creating schema $db"
 			echo "CREATE SCHEMA IF NOT EXISTS $db CHARACTER SET utf8mb4;" | "${mysql[@]}"
-			echo "USE $db;" | "${mysql[@]}"   # grant privileges 时候要求进入某个库后再执行
 			aaLog "schemas $db created"
 		done
 	fi
@@ -130,10 +129,14 @@ grantPrivileges(){
 
         # GRANT select,insert,update ON *.* TO 'iwi'@'%' IDENTIFIED WITH mysql_native_password BY 'password' ;
         # @'%' 不包括 @'localhost'  ，但是包括 @'127.0.0.1' 如果需要用localhost访问，则再增加一个授权
+
+         # grant privileges 时候要求进入某个库后再执行
+
         "${mysql[@]}" <<-EOSQL
         SET @@SESSION.SQL_LOG_BIN=0;
         CREATE USER IF NOT EXISTS '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
         ALTER USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
+        USE mysql;
         GRANT ${priv} ON ${tables} TO '${user}'@'${addr}' WITH GRANT OPTION ;
 EOSQL
 
@@ -211,6 +214,7 @@ if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
         read -r -d '' root_create <<-EOSQL || true
             CREATE USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
             ALTER USER 'root'@'${MysqlRootBindAddress}' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
+            USE mysql ;
             GRANT ALL ON *.* TO 'root'@'${MysqlRootBindAddress}' WITH GRANT OPTION ;
 EOSQL
     fi
@@ -224,6 +228,7 @@ EOSQL
         DROP USER 'root'@'localhost' ;
         CREATE USER IF NOT EXISTS 'root'@'localhost' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
         ALTER USER 'root'@'localhost' IDENTIFIED ${root_auth_plugin} BY '${MysqlRootPassword}' ;
+        USE mysql ;
         GRANT ALL ON *.* TO 'root'@'localhost' WITH GRANT OPTION ;
         ${root_create}
         DROP DATABASE IF EXISTS test ;
