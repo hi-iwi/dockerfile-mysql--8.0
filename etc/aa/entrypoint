@@ -88,14 +88,14 @@ createDatabases(){
     local db
 	if [ ! -z "${MysqlDatabases}" ]; then
 		dbs=$(echo "${MysqlDatabases}" | tr ',' "\n")
-		aaLog "Creating databases: $dbs ..."
+		aaLog "Creating schemas: $dbs"
 		# for i in 100 200 300; do 
 		# for i in "100 200 300"; do    error!!!
 		for db in $dbs; do
-			aaLog "Creating datebase $db ..."
+			aaLog "Creating schema $db"
 			echo "CREATE SCHEMA IF NOT EXISTS $db CHARACTER SET utf8mb4;" | "${mysql[@]}"
-			echo "USER $db;" | "${mysql[@]}"   # grant privileges 时候要求进入某个库后再执行
-			aaLog "Datebase $db created"
+			echo "USE $db;" | "${mysql[@]}"   # grant privileges 时候要求进入某个库后再执行
+			aaLog "schemas $db created"
 		done
 	fi
 }
@@ -132,8 +132,7 @@ grantPrivileges(){
         # @'%' 不包括 @'localhost'  ，但是包括 @'127.0.0.1' 如果需要用localhost访问，则再增加一个授权
         "${mysql[@]}" <<-EOSQL
         SET @@SESSION.SQL_LOG_BIN=0;
-        CREATE USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
-        -- change exists user's password
+        CREATE USER IF NOT EXISTS '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
         ALTER USER '${user}'@'${addr}' IDENTIFIED ${authPlugin} BY '${password}' ;
         GRANT ${priv} ON ${tables} TO '${user}'@'${addr}' WITH GRANT OPTION ;
 EOSQL
