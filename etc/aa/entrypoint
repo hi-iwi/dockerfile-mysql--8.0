@@ -112,6 +112,7 @@ grantPrivileges(){
     local password
     local sql
 
+    echo "[privileges] ${MysqlPrivileges}"
     for p in ${MysqlPrivileges//|.....|/ }; do
       echo "[privilege] ${p}"
         priv=$(echo $p | awk -F ':::' '{print $1;}')
