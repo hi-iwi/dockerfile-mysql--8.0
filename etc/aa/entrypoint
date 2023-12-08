@@ -8,6 +8,7 @@ Timezone=${Timezone:-''}
 Host=${Host:-'mysqldocker'}
 LogTag=${LogTag:-"mysqlent[$$]"}
 
+GeneralLog=${GeneralLog:-'0'}
 MysqlDatabases=${MysqlDatabases:-''}
 MysqlRootAuthPlugin=${MysqlRootAuthPlugin:-''}
 MysqlRootBindAddress=${MysqlRootBindAddress:-'%'}
@@ -36,11 +37,17 @@ setConfig() {
         local conf="$Cnf"
         [ ! -f "$conf" ] && echo -e "[mysqld]\nserver-id=1" > "$conf"
         aaLog "Configuration file: $conf"
-        if [ ! -z "${MysqlServerID}" ]; then
+
+        if [ "${GeneralLog}" -eq "1" ];then
+            aaLog "my.cnf general_log=1"
+            sed -Ei "s/^\s*general_log=0\s*$/general_log=1/" "$conf"
+        fi
+
+        if [ -n "${MysqlServerID}" ]; then
             aaLog "my.cnf server-id=${MysqlServerID}"
             sed -Ei "s/^(server-id)[\s=]*.+$/server-id=${MysqlServerID}/" "$conf"
         fi
-        if [ ! -z "${MysqlBinlogIgnoreDatabases}" ]; then
+        if [ -n "${MysqlBinlogIgnoreDatabases}" ]; then
             sed -Ei "s/^\s*(binlog-ignore-db|binlog-do-db)/#&/" $conf
             if [ "${MysqlBinlogIgnoreDatabases}" != '*' ]; then
                 echo "binlog-ignore-db=${MysqlBinlogIgnoreDatabases}" >> $conf
@@ -52,7 +59,7 @@ setConfig() {
             fi
         fi
 
-        if [ ! -z "${MysqlReplicateIgnoreDatabases}" ]; then
+        if [ -n "${MysqlReplicateIgnoreDatabases}" ]; then
             sed -Ei "s/^\s*(replicate-ignore-db|replicate-binlog-do-db)/#&/" $conf
             if [ "${MysqlReplicateIgnoreDatabases}" != '*' ]; then
                 echo "replicate-ignore-db=${MysqlReplicateIgnoreDatabases}" >> $conf
@@ -165,6 +172,7 @@ if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
         exit 1
     fi
 
+    # shellcheck disable=SC2145
     aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi"
     "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi
     aaLog 'Database initialized'
@@ -179,6 +187,7 @@ if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
     "$@" --skip-networking --socket="${socket}" &
     declare pid="$!"
     
+    # shellcheck disable=SC2145
     aaLog "Running $@ --skip-networking & : pid=$pid"
     
     ps aux 
