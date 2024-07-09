@@ -8,7 +8,7 @@ Timezone=${Timezone:-''}
 Host=${Host:-'mysqldocker'}
 LogTag=${LogTag:-"mysqlent[$$]"}
 
-GeneralLog=${GeneralLog:-'0'}
+#GeneralLog=${GeneralLog:-'0'}
 MysqlDatabases=${MysqlDatabases:-''}
 MysqlRootAuthPlugin=${MysqlRootAuthPlugin:-''}
 MysqlRootBindAddress=${MysqlRootBindAddress:-'%'}
@@ -27,8 +27,8 @@ AaAdjustTime "${Timezone}"
 # 这个是必须要的，即使在CentOS7容器已经设置过权限了，但是这里重新挂载之后，就必须要设置修改权限
 [ ! -d "/var/lib/dockervol/mysql-data" ] && mkdir -p "/var/lib/dockervol/mysql-data"
 [ ! -d "/var/lib/dockervol/mysql-logbin" ] && mkdir -p "/var/lib/dockervol/mysql-logbin"
-chown -R iwi:iwi /var/log/dockervol /var/lib/dockervol
-chown iwi:iwi "$Cnf"
+chown -R aario:aario /var/log/dockervol /var/lib/dockervol
+chown aario:aario "$Cnf"
 chmod 0444 "$Cnf"
 
 setConfig() {
@@ -38,10 +38,10 @@ setConfig() {
         [ ! -f "$conf" ] && echo -e "[mysqld]\nserver-id=1" > "$conf"
         aaLog "Configuration file: $conf"
 
-        if [ "${GeneralLog}" -eq "1" ];then
-            aaLog "my.cnf general_log=1"
-            sed -Ei "s/^\s*general_log=0\s*$/general_log=1/" "$conf"
-        fi
+#        if [ "${GeneralLog}" -eq "1" ];then
+#            aaLog "my.cnf general_log=1"
+#            sed -Ei "s/^\s*general_log=0\s*$/general_log=1/" "$conf"
+#        fi
 
         if [ -n "${MysqlServerID}" ]; then
             aaLog "my.cnf server-id=${MysqlServerID}"
@@ -147,7 +147,7 @@ grantPrivileges(){
             tbs="\`${tbs}\`"
         fi
 
-        # GRANT select,insert,update ON *.* TO 'iwi'@'%' IDENTIFIED WITH mysql_native_password BY 'password' ;
+        # GRANT select,insert,update ON *.* TO 'aario'@'%' IDENTIFIED WITH mysql_native_password BY 'password' ;
         # @'%' 不包括 @'localhost'  ，但是包括 @'127.0.0.1' 如果需要用localhost访问，则再增加一个授权
 
          # grant privileges 时候要求进入某个库后再执行；因此需要先执行 use mysql;
@@ -173,8 +173,8 @@ if [ ! -d "/var/lib/dockervol/mysql-data/mysql" ]; then
     fi
 
     # shellcheck disable=SC2145
-    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi"
-    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=iwi
+    aaLog "$@ --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=aario"
+    "$@" --initialize-insecure --datadir=/var/lib/dockervol/mysql-data --user=aario
     aaLog 'Database initialized'
 
     if command -v /usr/local/bin/mysql_ssl_rsa_setup > /dev/null && [ ! -e "/var/lib/dockervol/mysql-data/server-key.pem" ]; then
@@ -396,6 +396,6 @@ setConfig
 
 RunningSignal ${RunningID:-''}
 
-su - iwi << EOF
+su - aario << EOF
 	$@
 EOF
